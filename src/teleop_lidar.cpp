@@ -12,6 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+/// #### teleop_lidar
+// This controller is a simple teleoperation controller that allows the user to move the robot using the keyboard, and also
+// take snapshots of the environment using the lidar sensor.
+
 #include "ros/ros.h"
 
 #include <webots_ros/Int32Stamped.h>
@@ -27,15 +31,26 @@
 #include <stdio.h>
 
 #define TIME_STEP 32
+#define MAX_L_SPEED 10.0
+#define MAX_W_SPEED 2.0
 
-static double lposition = 0;
-static double rposition = 0;
+static double linear_vel = 0;
+static double angular_vel = 0;
 
-ros::ServiceClient leftWheelClient;
-webots_ros::set_float leftWheelSrv;
+ros::ServiceClient leftWheelPos_Client;
+webots_ros::set_float leftWheelPos_Srv;
 
-ros::ServiceClient rightWheelClient;
-webots_ros::set_float rightWheelSrv;
+ros::ServiceClient rightWheelPos_Client;
+webots_ros::set_float rightWheelPos_Srv;
+
+ros::ServiceClient leftWheelVel_Client;
+webots_ros::set_float leftWheelVel_Srv;
+
+ros::ServiceClient rightWheelVel_Client;
+webots_ros::set_float rightWheelVel_Srv;
+
+ros::ServiceClient lidarClient;
+webots_ros::set_float lidarSrv;
 
 ros::ServiceClient timeStepClient;
 webots_ros::set_int timeStepSrv;
@@ -59,23 +74,11 @@ void keyboardCallback(const webots_ros::Int32Stamped::ConstPtr &value) {
 
   switch (key) {
     case 314:
-      lposition += -0.2;
-      rposition += 0.2;
+      angular_vel = -MAX_W_SPEED;
       send = 1;
       break;
     case 316:
-      lposition += 0.2;
-      rposition += -0.2;
-      send = 1;
-      break;
-    case 315:
-      lposition += 0.2;
-      rposition += 0.2;
-      send = 1;
-      break;
-    case 317:
-      lposition += -0.2;
-      rposition += -0.2;
+      angular_vel = MAX_W_SPEED;
       send = 1;
       break;
     case 312:
@@ -83,15 +86,32 @@ void keyboardCallback(const webots_ros::Int32Stamped::ConstPtr &value) {
       quit(-1);
       break;
     default:
-      send = 0;
+      angular_vel = 0;
+      send = 1;
       break;
   }
 
-  leftWheelSrv.request.value = lposition;
-  rightWheelSrv.request.value = rposition;
+  switch (key) {
+    case 315:
+      linear_vel = MAX_L_SPEED;
+      send = 1;
+      break;
+    case 317:
+      linear_vel = -MAX_L_SPEED;
+      send = 1;
+      break;
+    default:
+      linear_vel = 0;
+      send = 1;
+      break;
+  }
+
+  leftWheelVel_Srv.request.value = linear_vel + angular_vel / 2;
+  rightWheelVel_Srv.request.value = linear_vel - angular_vel / 2;
+
   if (send) {
-    if (!leftWheelClient.call(leftWheelSrv) || !rightWheelClient.call(rightWheelSrv) || !leftWheelSrv.response.success ||
-        !rightWheelSrv.response.success)
+    if (!leftWheelVel_Client.call(leftWheelVel_Srv) || !rightWheelVel_Client.call(rightWheelVel_Srv) ||
+        !leftWheelVel_Srv.response.success || !rightWheelVel_Srv.response.success)
       ROS_ERROR("Failed to send new position commands to the robot.");
   }
   return;
@@ -107,9 +127,15 @@ int main(int argc, char **argv) {
   // Wait for the `ros` controller.
   ros::service::waitForService("/robot/time_step");
   ros::spinOnce();
+  leftWheelPos_Client = n.serviceClient<webots_ros::set_float>("/left_wheel_motor/set_position");
+  rightWheelPos_Client = n.serviceClient<webots_ros::set_float>("/right_wheel_motor/set_position");
+  leftWheelPos_Srv.request.value = INFINITY;
+  rightWheelPos_Srv.request.value = INFINITY;
+  leftWheelPos_Client.call(leftWheelPos_Srv);
+  rightWheelPos_Client.call(rightWheelPos_Srv);
 
-  leftWheelClient = n.serviceClient<webots_ros::set_float>("/left_wheel/set_position");
-  rightWheelClient = n.serviceClient<webots_ros::set_float>("/right_wheel/set_position");
+  leftWheelVel_Client = n.serviceClient<webots_ros::set_float>("/left_wheel_motor/set_velocity");
+  rightWheelVel_Client = n.serviceClient<webots_ros::set_float>("/right_wheel_motor/set_velocity");
   timeStepClient = n.serviceClient<webots_ros::set_int>("/robot/time_step");
 
   timeStepSrv.request.value = TIME_STEP;
@@ -118,9 +144,7 @@ int main(int argc, char **argv) {
   enableKeyboardSrv.request.value = TIME_STEP;
   if (enableKeyboardClient.call(enableKeyboardSrv) && enableKeyboardSrv.response.success) {
     ros::Subscriber sub_keyboard;
-
     sub_keyboard = n.subscribe("/keyboard/key", 1, keyboardCallback);
-
     while (sub_keyboard.getNumPublishers() == 0) {
     }
     ROS_INFO("Keyboard enabled.");

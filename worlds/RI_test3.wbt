@@ -1,0 +1,60 @@
+#VRML_SIM R2023b utf8
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackground.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/robots/adept/pioneer2/protos/Pioneer2.proto"
+
+WorldInfo {
+}
+Viewpoint {
+  orientation 0.6047819263351196 -0.027267482106772514 -0.7959241835740002 3.2133280174344128
+  position 12.54306691759369 3.6149719443011383 30.515941970652978
+}
+TexturedBackground {
+}
+TexturedBackgroundLight {
+}
+Solid {
+  translation 0.31 -0.52 0
+  children [
+    Transform {
+      translation -3 -34 0
+      scale 7 4 4
+      children [
+        Shape {
+          geometry Mesh {
+          }
+        }
+        CadShape {
+          url [
+            "../../../../Documents/tinker.obj"
+          ]
+        }
+      ]
+    }
+    Shape {
+      appearance Appearance {
+        material Material {
+          diffuseColor 0 0.8 0.2
+        }
+      }
+      geometry Plane {
+        size 20 20
+      }
+    }
+  ]
+  name "Plane_tilde"
+  boundingObject Plane {
+    size 20 20
+  }
+  locked TRUE
+}
+Pioneer2 {
+  hidden position_0_0 2009.5590399998746
+  hidden position_0_1 384.27903999999324
+  hidden rotation_1 0.5807657142576024 -0.5807658226281599 -0.5704579251880841 2.1047641938482706
+  hidden rotation_2 -0.5608998344013811 0.5608999379021227 0.6089192355558316 4.235496305638514
+  translation 0.394932 0.733656 0
+  rotation 0 0 1 -371.3495569622784
+  controller "ros"
+}

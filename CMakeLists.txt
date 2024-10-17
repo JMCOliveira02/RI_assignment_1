@@ -181,6 +181,30 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 
+#### ADDED NODES
+
+
+## Instructions for teleop_lidar node
+
+add_executable(teleop_lidar src/teleop_lidar.cpp)
+
+add_dependencies(teleop_lidar webots_ros_generate_messages_cpp)
+
+target_link_libraries(teleop_lidar
+	${catkin_LIBRARIES}
+)
+
+add_executable(PointCloudPublisher src/PointCloudPublisher.cpp)
+
+add_dependencies(PointCloudPublisher webots_ros_generate_messages_cpp)
+
+target_link_libraries(PointCloudPublisher
+	${catkin_LIBRARIES}
+)
+
+
+#############
+
 
 ## Instructions for keyboard_teleop node
 
@@ -247,6 +271,15 @@ target_link_libraries(panoramic_view_recorder
 #############
 ## Install ##
 #############
+
+#### ADDED NODES
+install(TARGETS teleop_lidar
+        RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
+
+install(TARGETS PointCloudPublisher
+        RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
+
+################
 
 install(TARGETS keyboard_teleop
         RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})

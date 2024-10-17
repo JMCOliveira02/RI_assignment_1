@@ -2,47 +2,44 @@
 
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackground.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
-EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/floors/protos/RectangleArena.proto"
-EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/factory/containers/protos/CardboardBox.proto"
-EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/factory/containers/protos/WoodenBox.proto"
 
 WorldInfo {
 }
 Viewpoint {
-  orientation -0.29792322149257405 -0.062241689917157686 0.9525585158570277 3.5192886905692773
-  position 7.0322737438917065 2.283951226353048 5.172250449307948
+  orientation 0.028727071798829874 0.1640435919975525 -0.9860347130149147 0.9286959917042826
+  position -20.31219182417476 5.352251601296921 1.405286482082738
+  followType "Pan and Tilt Shot"
 }
-TexturedBackground {
+Solid {
+  translation 0 1.83661e-06 -0.5
+  rotation 1 0 0 1.5708
+  children [
+    CadShape {
+      url [
+        "../../../../Downloads/iilab.obj"
+      ]
+    }
+  ]
+  name "iilab"
+  boundingObject Mesh {
+    url [
+      "../../../../Downloads/iilab.obj"
+    ]
+  }
 }
-TexturedBackgroundLight {
-}
-RectangleArena {
-  floorSize 4 4
-  wallThickness 0.1
-  wallHeight 0.5
-}
-CardboardBox {
-  translation 1.31407 0.444198 0.3
-  rotation 0 0 1 1.5707963267948966
-}
-CardboardBox {
-  translation 0.133486 1.17773 0.3
-  rotation 0 0 1 1.5707963267948966
-  name "cardboard box(1)"
-}
-WoodenBox {
-  translation -0.797045 -1.02408 0.3
-  rotation 0 0 1 1.5707963267948966
-}
-DEF PIONEER_3DX Robot {
-  translation -0.22627634163901564 -0.09561777562012512 0.09487824579486742
-  rotation 0.019297250207426713 0.0003784783467824746 0.9998137190939986 -3.0794303786754487
+Robot {
+  translation -18.058272943444255 1.311198496456426 -0.10507217817814246
+  rotation 0.019767488460771525 -0.07206408343037331 0.9972040986073479 0.5534839330594579
   children [
     Lidar {
       translation 0 0 0.2
-      fieldOfView 3.14
-      numberOfLayers 10
-      maxRange 2
+      rotation 0 0 1 0.523599
+      tiltAngle 0.523
+      horizontalResolution 2400
+      fieldOfView 6.28
+      verticalFieldOfView 1.047
+      numberOfLayers 40
+      maxRange 1.5
     }
     DEF BODY Pose {
       rotation 0.5773502691896258 -0.5773502691896258 -0.5773502691896258 2.094395
@@ -568,23 +565,23 @@ DEF PIONEER_3DX Robot {
     }
     DEF CASTER_WHEEL HingeJoint {
       jointParameters HingeJointParameters {
-        position 14.301843259964043
+        position -3.8813041059946944
         axis 0 0 1
         anchor -0.1918 0 0
         staticFriction 0.05
       }
       endPoint Solid {
         translation -0.1918 0 0
-        rotation 0.99325845302895 0.0819683935003923 0.081968457064299 1.5775605948216047
+        rotation -0.8483782887245994 -0.374335561431601 -0.3743356337144626 4.548696333235046
         children [
           DEF casterWheelRim HingeJoint {
             jointParameters HingeJointParameters {
-              position -643.5936831279733
+              position -213.6553653289293
               anchor 0 -0.0521014 0.012843
             }
             endPoint Solid {
               translation 0 -0.0521014 0.012843
-              rotation -1 0 0 2.708781795655529
+              rotation -1 0 0 0.027064884823357765
               children [
                 DEF CASTER_WHEEL_RIM_SHAPE Shape {
                   appearance PBRAppearance {
@@ -662,8 +659,8 @@ DEF PIONEER_3DX Robot {
               }
               physics Physics {
               }
-              linearVelocity -9.026419514249992e-10 -2.628300340155713e-10 5.478117616067453e-07
-              angularVelocity 1.1364644809673749e-08 -2.318845864174077e-08 1.117653079502996e-07
+              linearVelocity 2.169428944384722e-12 4.3897760477639607e-10 5.748813913462678e-07
+              angularVelocity -2.009413538693336e-08 -8.987043331625413e-10 9.038623425427355e-08
             }
           }
           DEF FORK_SHAPE Shape {
@@ -721,8 +718,8 @@ DEF PIONEER_3DX Robot {
         }
         physics Physics {
         }
-        linearVelocity -9.630850014668868e-11 -1.0160946947611466e-10 2.674959046401952e-07
-        angularVelocity 1.0874353130908094e-08 -2.279724375907659e-08 1.1178020490486059e-07
+        linearVelocity 1.1720369285380007e-10 -2.6876517595219806e-10 2.8110511479316204e-07
+        angularVelocity -1.7053465593035288e-08 1.3317909694448528e-08 9.0782637200968e-08
       }
     }
     DEF GREEN_LED LED {
@@ -749,7 +746,7 @@ DEF PIONEER_3DX Robot {
     }
     DEF LEFT_WHEEL HingeJoint {
       jointParameters HingeJointParameters {
-        position 39.799999989717335
+        position 468.8487060123425
         axis 0 1 0
         anchor 0 0.165 0
       }
@@ -764,7 +761,7 @@ DEF PIONEER_3DX Robot {
       ]
       endPoint Solid {
         translation 0 0.165 0
-        rotation -0.2534035760221796 0.2534036461928315 -0.9335808587130254 1.6394699426676829
+        rotation -0.675954650891401 0.67595470820526 -0.2935481943283348 2.5705382015705833
         children [
           DEF BLACK_CYLINDER_SHAPE Shape {
             appearance PBRAppearance {
@@ -928,8 +925,8 @@ DEF PIONEER_3DX Robot {
         }
         physics Physics {
         }
-        linearVelocity -3.5335947928944014e-10 -1.7425848365340742e-10 2.79065016721531e-07
-        angularVelocity 1.7273373554040846e-09 -3.004773200029282e-09 -3.228369382763644e-11
+        linearVelocity 5.87469804297182e-10 -1.805261950526057e-10 2.699701740715441e-07
+        angularVelocity -5.055094603793912e-09 6.152134724892263e-09 1.8058469277468246e-10
       }
     }
     DEF LOWER_YELLOW_LED LED {
@@ -1029,7 +1026,7 @@ DEF PIONEER_3DX Robot {
     }
     DEF RIGHT_WHEEL HingeJoint {
       jointParameters HingeJointParameters {
-        position 15.399999990624888
+        position 465.2921278982353
         axis 0 1 0
         anchor 0 -0.165 0
       }
@@ -1044,7 +1041,7 @@ DEF PIONEER_3DX Robot {
       ]
       endPoint Solid {
         translation 0 -0.165 0
-        rotation -0.5083332889354312 0.50833336007978 -0.6951219046973617 1.9267035054569284
+        rotation 0.5009059581899126 -0.5009059460758699 -0.7058232457461875 1.9123455573077588
         children [
           DEF RIGHT_BLACK_CYLINDER_SHAPE Shape {
             appearance PBRAppearance {
@@ -1124,8 +1121,8 @@ DEF PIONEER_3DX Robot {
         boundingObject USE BOUNDING_WHEEL
         physics Physics {
         }
-        linearVelocity -3.670572008480666e-10 -1.7855270630839805e-10 2.574024652772439e-07
-        angularVelocity 1.807862043154076e-09 -4.319680259295445e-09 -3.2866551089292924e-11
+        linearVelocity 7.122038184021242e-10 -1.0212854723617688e-10 2.5322897768466456e-07
+        angularVelocity -5.317212554392883e-09 6.5786646642452e-09 1.8041553519476893e-10
       }
     }
     DEF SO_0 DistanceSensor {
@@ -3070,6 +3067,10 @@ DEF PIONEER_3DX Robot {
     ]
   }
   controller "ros"
-  linearVelocity -1.8427672569321034e-09 -3.7624534335045427e-10 -4.4816029158825676e-09
-  angularVelocity 3.0099592977996586e-09 -2.389764844248184e-08 -4.1544069841896656e-11
+  linearVelocity 1.7819066627710647e-09 6.639969976528116e-10 -4.348680332788623e-09
+  angularVelocity -1.3173373614826574e-08 1.936446733011042e-08 1.7529790429113732e-10
+}
+TexturedBackground {
+}
+TexturedBackgroundLight {
 }
