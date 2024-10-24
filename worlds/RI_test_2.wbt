@@ -6,8 +6,8 @@ EXTERNPROTO "../protos/RectangleArena.proto"
 WorldInfo {
 }
 Viewpoint {
-  orientation -0.16547621367936982 -0.13961786447904143 0.9762809404186131 4.519687022687463
-  position -6.66801725429804 44.64308757944019 10.3274737646623
+  orientation 0.04499510687360278 -0.9979833592849093 -0.04477337320149809 4.705367385217821
+  position -1.6102260827766375 -2.617811993316733 41.355605710721456
 }
 Solid {
   translation 5 3 1
@@ -48,25 +48,16 @@ Solid {
   }
 }
 Robot {
-  translation -1.09324 1.75432 0.04
-  rotation 0 0 1 -1.7482453071795865
+  translation -2.09699 0.971641 0.04
+  rotation 0 0 1 0.0843504
   children [
     Lidar {
-      translation -0.04 0 0.3
-      name "lidar_front"
+      translation -0.0393742 0.00712128 0.3
+      rotation 0 0 1 -1.7496953071795867
       horizontalResolution 50
-      fieldOfView 1
+      fieldOfView 6.28
       numberOfLayers 1
       maxRange 3
-    }
-    Lidar {
-      translation 0 0 0.3
-      rotation 0 0 1 -1.2260996938995747
-      name "lidar_right"
-      horizontalResolution 50
-      fieldOfView 1
-      numberOfLayers 1
-      maxRange 4
     }
     Group {
     }
@@ -513,7 +504,7 @@ Robot {
       type "infra-red"
     }
   ]
-  name "Pioneer 2"
+  name "robot1"
   description "designed by Activmedia Robotics"
   boundingObject Pose {
     translation -0.0447 0 0.13
@@ -526,4 +517,7 @@ Robot {
     ]
   }
   controller "ros"
+  controllerArgs [
+    "--name=robot1"
+  ]
 }
