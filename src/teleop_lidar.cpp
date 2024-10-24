@@ -137,7 +137,8 @@ public:
     }
 
     // Angle of nearest object in radians
-    min_angle_distance[0] = 0;  // min_index * (2 * M_PI / LIDAR_RESOLUTION - LIDAR_MIN_ANGLE);
+    min_angle_distance[0] = min_index * 2 * M_PI / LIDAR_RESOLUTION;
+    std::cout << "Nearest obstacle angle: " << min_angle_distance[0] * 180 / M_PI << std::endl;
 
     // Distance to nearest object
     min_angle_distance[1] = min_distance;
