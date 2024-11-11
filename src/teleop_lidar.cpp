@@ -57,24 +57,73 @@ private:
   float v_max, w_max;
   float v, w, theta;
 
+  int desired_angle;
+  int angle_correction;
+
+  float b; // Distance between the two wheels(m)
+  int current_state; // 0: Too close to wall, 1: Too far from wall, 2: Normal
+
+
+
 public:
+  
+  float laser_scan[LIDAR_RESOLUTION];
+  float min_angle_distance[2];
+  float target_distance;
+  float tolerance;
+
   Robot(std::string name, float v_max, float w_max) {
     this->name = name;
     this->v_max = v_max;
     this->w_max = w_max;
+
+    b = 0.381;
     v = 0;
     w = 0;
+
     theta = 0;
+    desired_angle = 90;
+    angle_correction = 30;
+
+    current_state = 0;
     leftWheelPos_Client = n.serviceClient<webots_ros::set_float>('/' + name + LEFT_WHEEL_POS_SERVICE);
     rightWheelPos_Client = n.serviceClient<webots_ros::set_float>('/' + name + RIGHT_WHEEL_POS_SERVICE);
     leftWheelVel_Client = n.serviceClient<webots_ros::set_float>('/' + name + LEFT_WHEEL_VEL_SERVICE);
     rightWheelVel_Client = n.serviceClient<webots_ros::set_float>('/' + name + RIGHT_WHEEL_VEL_SERVICE);
     timeStepClient = n.serviceClient<webots_ros::set_int>('/' + name + TIME_STEP_SRV);
     timeStepSrv.request.value = TIME_STEP;
-    setVelocity(0, 0);
+    setVelocity();
     setWheelPosition(INFINITY, INFINITY);
-
     // lidarSub = n.subscribe('/' + name + LIDAR_TOPIC, 1, &Robot::getLaserScan, this);
+  }
+
+  void updateStateMachine() {
+    
+    if (min_angle_distance[1] < target_distance - tolerance){
+      //Too close to wall
+      current_state = 1;
+      theta = desired_angle - angle_correction;
+    }
+    else if (min_angle_distance[1] > target_distance + tolerance){
+      //Too far from wall
+      current_state = 2;
+      theta = desired_angle + angle_correction;
+    }
+    else{
+      //Correct distance from wall
+      current_state = 3;
+      theta = desired_angle;
+    }
+  }
+
+  bool check_lidar() {
+    sensor_msgs::LaserScan::ConstPtr msg = ros::topic::waitForMessage<sensor_msgs::LaserScan>('/' + name + LIDAR_TOPIC, n, ros::Duration(1.0)); // timeout after 1 second
+    if (!msg) {
+      ROS_WARN("LIDAR not responding.");
+      enable_lidar();  // Try re-enabling LIDAR
+      return false;
+    }
+    return true;
   }
 
   void enable_lidar() {
@@ -101,10 +150,10 @@ public:
     return false;
   }
 
-  bool setVelocity(float linear_vel, float angular_vel) {
-    std::cout << "Setting velocity to " << linear_vel << " " << angular_vel << std::endl;
-    float left_vel = linear_vel - angular_vel / 2;
-    float right_vel = linear_vel + angular_vel / 2;
+  bool setVelocity() {
+    std::cout << "Setting velocity to " << v << " " << w << std::endl;
+    float left_vel = v - w / 2;
+    float right_vel = v + w / 2;
     // std::cout << "Setting left velocity to " << left_vel << std::endl;
     // std::cout << "Setting right velocity to " << right_vel << std::endl;
     this->leftWheelVel_Srv.request.value = left_vel;
@@ -112,9 +161,6 @@ public:
     return this->leftWheelVel_Client.call(this->leftWheelVel_Srv) && this->rightWheelVel_Client.call(this->rightWheelVel_Srv) &&
            this->leftWheelVel_Srv.response.success && this->rightWheelVel_Srv.response.success;
   }
-
-  float laser_scan[LIDAR_RESOLUTION];
-  float min_angle_distance[2];
 
   void getLaserScan() {
     std::cout << "Waiting for laser scan" << std::endl;
@@ -145,6 +191,66 @@ public:
 
     return;
   }
+
+  float clamp(float value, float min, float max) {
+    if (value < min) return min;
+    if (value > max) return max;
+    return value;
+  }
+
+  // PID controller for angular velocity
+  float Kp = 0.002;  // Proportional gain, start small
+  float Ki = 0.000005; // Integral gain, for accumulated error correction
+  float Kd = 0.0001;   // Derivative gain, for rate of change dampening
+
+  float error = 0;
+  float previous_error = 0;
+  float integral = 0;
+  float derivative = 0;
+  
+  void calculateAngularVelocity() {
+    error = theta - min_angle_distance[0];
+
+    // Wrap the error to keep it within [-PI, PI]
+    if (error < -M_PI) error += 2 * M_PI;
+    else if (error > M_PI) error -= 2 * M_PI;
+
+    // Calculate the integral and derivative components
+    integral += error;  // Accumulate the integral of the error
+    derivative = error - previous_error;
+
+    // Update previous error for the next cycle
+    previous_error = error;
+
+    switch (current_state)
+    {
+    case 0:
+      w = 0;
+      break;
+    
+    case 1:
+      // PID formula for angular velocity
+      w = ((Kp * error) + (Ki * integral) + (Kd * derivative)) * (-1); // Turn right
+      break;
+
+    default:
+      // PID formula for angular velocity
+      w = (Kp * error) + (Ki * integral) + (Kd * derivative);
+      break;
+    }
+
+    // TODO: Increase angular velocity if a corner is detected
+    
+    // Clamp the angular velocity to prevent it from becoming too large
+    w = clamp(w, -w_max, w_max);
+
+    // Debug output for tracking PID components
+    ROS_INFO("Error: %.4f | Integral: %.4f | Derivative: %.4f | Angular Velocity (w): %.4f", error, integral, derivative, w);
+  }
+  
+  void calculateLinearVelocity(){
+    v = 1.0;
+  }
 };
 
 void quit(int sig) {
@@ -163,15 +269,37 @@ int main(int argc, char **argv) {
 
   // Wait for the `ros` controller.
   ros::service::waitForService("/robot1/robot/time_step");
+  std::cout << "time_step: " <<TIME_STEP<< std::endl;
   ros::spinOnce();
+
   robot1.enable_lidar();
+  robot1.setWheelPosition(INFINITY, INFINITY); // Não sei pq mas tive que voltar a fazer isto, caso contrário não funciona
+  robot1.target_distance = 0.75;
+  robot1.tolerance = 0.01;
 
   // main loop
   while (ros::ok()) {
     ros::spinOnce();
-    robot1.getLaserScan();
-    robot1.getClosestObstacle();
-    std::cout << "Nearest obstacle angle: " << robot1.min_angle_distance[0] * 180 / M_PI << std::endl;
+
+    if(robot1.check_lidar()) {
+      //robot1.setVelocity(1.0, 0.0);
+      robot1.getLaserScan();
+      robot1.getClosestObstacle();
+      //std::cout << "Nearest obstacle angle: " << robot1.min_angle_distance[0] * 180 / M_PI << std::endl;
+      std::cout << "Nearest obstacle distance: " << robot1.min_angle_distance[1] << std::endl;
+
+      robot1.updateStateMachine();
+
+      robot1.calculateAngularVelocity();
+      robot1.calculateLinearVelocity();
+
+      // Set wheel velocity
+      if (robot1.setVelocity()) {
+          ROS_INFO("Velocity set successfully\n");
+      } else {
+          ROS_WARN("Failed to set velocity");
+      }
+    }
   }
   return (0);
 }
