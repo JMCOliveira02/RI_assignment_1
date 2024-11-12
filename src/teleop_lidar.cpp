@@ -10,14 +10,14 @@
 
 #define TIME_STEP 32
 #define MAX_LINEAR_SPEED 10.0
-#define MAX_ANGULAR_SPEED 2.0
+#define MAX_ANGULAR_SPEED 4.0
 
 #define TIME_STEP_SRV "/robot/time_step"
 
 #define ROBOT_1_NAME "robot1"
 #define ROBOT_2_NAME "robot2"
 
-#define LIDAR_RESOLUTION 60
+#define LIDAR_RESOLUTION 360
 #define LIDAR_MIN_ANGLE - M_PI
 #define LIDAR_SERVICE "/lidar/enable"
 #define LIDAR_TOPIC "/lidar/laser_scan"
@@ -61,7 +61,7 @@ private:
   float angle_correction;
 
   float b; // Distance between the two wheels(m)
-  int current_state; // 0: Too close to wall, 1: Too far from wall, 2: Normal
+  bool follower; //Defines if robot is of the type follower
 
 
 
@@ -69,10 +69,14 @@ public:
   
   float laser_scan[LIDAR_RESOLUTION];
   float min_angle_distance[2];
-  float target_distance;
-  float tolerance;
+  float target_wall_distance;
+  float wall_distance_tolerance;
 
-  Robot(std::string name, float v_max, float w_max) {
+  float target_front_distance;
+  float front_distance_tolerance;
+
+
+  Robot(std::string name, float v_max, float w_max, bool follower) {
     this->name = name;
     this->v_max = v_max;
     this->w_max = w_max;
@@ -85,7 +89,7 @@ public:
     desired_angle = M_PI/2;
     angle_correction = 10;
 
-    current_state = 0;
+    this->follower = follower;
     leftWheelPos_Client = n.serviceClient<webots_ros::set_float>('/' + name + LEFT_WHEEL_POS_SERVICE);
     rightWheelPos_Client = n.serviceClient<webots_ros::set_float>('/' + name + RIGHT_WHEEL_POS_SERVICE);
     leftWheelVel_Client = n.serviceClient<webots_ros::set_float>('/' + name + LEFT_WHEEL_VEL_SERVICE);
@@ -97,15 +101,15 @@ public:
     // lidarSub = n.subscribe('/' + name + LIDAR_TOPIC, 1, &Robot::getLaserScan, this);
   }
 
-  void updateStateMachine() {
+/*   void updateStateMachine() {
     
-    if (min_angle_distance[1] < target_distance - tolerance){
+    if (min_angle_distance[1] < target_wall_distance - wall_distance_tolerance){
       //Too close to wall
       current_state = 1;
       theta = desired_angle - angle_correction;
       theta = desired_angle;
     }
-    else if (min_angle_distance[1] > target_distance + tolerance){
+    else if (min_angle_distance[1] > target_wall_distance + wall_distance_tolerance){
       //Too far from wall
       current_state = 2;
       theta = desired_angle + angle_correction;
@@ -116,7 +120,7 @@ public:
       current_state = 3;
       theta = desired_angle;
     }
-  }
+  } */
 
   bool check_lidar() {
     sensor_msgs::LaserScan::ConstPtr msg = ros::topic::waitForMessage<sensor_msgs::LaserScan>('/' + name + LIDAR_TOPIC, n, ros::Duration(1.0)); // timeout after 1 second
@@ -173,11 +177,18 @@ public:
     }
   }
 
-  void getClosestObstacle() {
+  void getClosestObstacle(float fov_start, float fov_end) {
+    // field of view in radians: [fov_start, fov_end]
     float angle_distance[2];
     float min_distance = 1000;
     float min_index = 0;
-    for (int i = 0; i < LIDAR_RESOLUTION; i++) {
+    float max_index = 0;
+    float angle_step = (2*M_PI) / LIDAR_RESOLUTION;
+    
+    min_index = (int)(fov_start / angle_step);
+    max_index = (int)(fov_end / angle_step);
+
+    for (int i = min_index; i <= max_index; i++) {
       if (laser_scan[i] < min_distance) {
         min_distance = laser_scan[i];
         min_index = i;
@@ -201,51 +212,52 @@ public:
   }
 
   // PID controller for angular velocity
-  float Kp_w = 1.0/(M_PI/2);  // Proportional gain, start small
+  float Kp_theta = 18.0/(M_PI/2);  // Proportional gain, start small
   //float Ki_w = 0.000005; // integral_w gain, for accumulated error_w correction
-  float Ki_w = 0;
+  float Ki_theta = 0;
   //float Kd_w = 0.0001;   // derivative_w gain, for rate of change dampening
-  float Kd_w = 0;
+  float Kd_theta = 0;
 
-  float error_w = 0;
-  float previous_error_w = 0;
+  float Kp_distance = 6.0;
+
+
+  float error_theta = 0;
+  float previous_error_theta = 0;
+  
+  float error_distance = 0;
+  float previous_error_distance = 0;
   float integral_w = 0;
   float derivative_w = 0;
   
   void calculateAngularVelocity() {
-    error_w = theta - min_angle_distance[0];
+    // Get closest point  
+    getClosestObstacle(0, M_PI);
+    // Error between the desired angle of movement and the closest obstacle angle detected
+    error_theta = theta - min_angle_distance[0];
+    // Error between the desired distance and the 
+    error_distance = target_wall_distance - min_angle_distance[1];
 
-    // Wrap the error_w to keep it within [-PI, PI]
-    //if (error_w < - M_PI) error_w += 2 * M_PI;
-    //else if (error_w > M_PI) error_w -= 2 * M_PI;
-
+    if(abs(error_distance) < wall_distance_tolerance){
+      error_distance = 0;
+    }
     // Calculate the integral_w and derivative_w components
-    integral_w += error_w;  // Accumulate the integral_w of the error_w
-    derivative_w = error_w - previous_error_w;
+    //integral_w += error_w;  // Accumulate the integral_w of the error_w
+    //derivative_w = error_w - previous_error_w;
 
     // Update previous error_w for the next cycle
-    previous_error_w = error_w;
+    previous_error_theta = error_theta;
+    previous_error_distance = error_distance;
 
-    switch (current_state)
-    {
-    case 0:
-      w = 0;
-      break;
-    
-    default:
-      // PID formula for angular velocity
-      w = (Kp_w * error_w) + (Ki_w * integral_w) + (Kd_w * derivative_w); // Turn left
-      break;
-    }
 
-    // TODO: Increase angular velocity if a corner is detected
+    // PID formula for angular velocity
+    w = (Kp_theta * error_theta) - (Kp_distance * error_distance) ;//+ (Ki_w * integral_w) + (Kd_w * derivative_w);
     
     // Clamp the angular velocity to prevent it from becoming too large
     w = clamp(w, -w_max, w_max);
 
     // Debug output for tracKing PID components
     std::cout << "theta: " << theta * 180.0 /M_PI << "min_angle_distance " << min_angle_distance[0] * 180.0 / M_PI << std::endl;
-    ROS_INFO("error_w: %.4f | integral_w: %.4f | derivative_w: %.4f | Angular Velocity (w): %.4f", error_w * 180.0 / M_PI, integral_w, derivative_w, w);
+    ROS_INFO("error_w: %.4f | integral_w: %.4f | derivative_w: %.4f | Angular Velocity (w): %.4f", error_theta * 180.0 / M_PI, integral_w, derivative_w, w);
   }
   
   float error_v = 0;
@@ -256,26 +268,11 @@ public:
 
 
   void calculateLinearVelocity(){
-    /*error_v = std::abs(target_distance - min_angle_distance[1]);
-
-    if (error_v < 0.1){
-      Kp_v = 1.0;
-    }
-    else{
-      Kp_v = error_v*10;
+    if(!follower){
+      v = 5.0;
+      return;
     }
 
-
-    v = in_target_v/Kp_v;
-
-    // Clamp the linear velocity to prevent it from becoming too large
-    v = clamp(v, -v_max, v_max);
-
-    // Debug output for tracking PID components
-    ROS_INFO("error_v: %.4f | Linear Velocity (v): %.4f", error_v, v);*/
-
-    // Constant linear velocity
-    v = 0.5;
   }
 };
 
@@ -288,8 +285,8 @@ void quit(int sig) {
 int main(int argc, char **argv) {
   ros::init(argc, argv, "wall_follower", ros::init_options::AnonymousName);
 
-  Robot robot1(ROBOT_1_NAME, MAX_LINEAR_SPEED, MAX_ANGULAR_SPEED);
-  Robot robot2(ROBOT_2_NAME, MAX_LINEAR_SPEED, MAX_ANGULAR_SPEED);
+  Robot robot1(ROBOT_1_NAME, MAX_LINEAR_SPEED, MAX_ANGULAR_SPEED, false);
+  Robot robot2(ROBOT_2_NAME, MAX_LINEAR_SPEED, MAX_ANGULAR_SPEED, true);
 
   signal(SIGINT, quit);
 
@@ -300,8 +297,13 @@ int main(int argc, char **argv) {
 
   robot1.enable_lidar();
   robot1.setWheelPosition(INFINITY, INFINITY); // Não sei pq mas tive que voltar a fazer isto, caso contrário não funciona
-  robot1.target_distance = 0.75;
-  robot1.tolerance = 0.01;
+  robot1.target_wall_distance = 0.75;
+  robot1.wall_distance_tolerance = 0.10;
+
+  robot2.enable_lidar();
+  robot2.setWheelPosition(INFINITY, INFINITY);
+  robot2.target_wall_distance = 0.75;
+  robot2.wall_distance_tolerance = 0.10;
 
   // main loop
   while (ros::ok()) {
@@ -310,11 +312,10 @@ int main(int argc, char **argv) {
     //if(robot1.check_lidar()) {
     //robot1.setVelocity(1.0, 0.0);
     robot1.getLaserScan();
-    robot1.getClosestObstacle();
     //std::cout << "Nearest obstacle angle: " << robot1.min_angle_distance[0] * 180 / M_PI << std::endl;
     std::cout << "Nearest obstacle distance: " << robot1.min_angle_distance[1] << std::endl;
 
-    robot1.updateStateMachine();
+    //robot1.updateStateMachine();
 
     robot1.calculateAngularVelocity();
     robot1.calculateLinearVelocity();
