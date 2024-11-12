@@ -18,7 +18,7 @@
 #define ROBOT_2_NAME "robot2"
 
 #define LIDAR_RESOLUTION 60
-#define LIDAR_MIN_ANGLE -M_PI
+#define LIDAR_MIN_ANGLE - M_PI
 #define LIDAR_SERVICE "/lidar/enable"
 #define LIDAR_TOPIC "/lidar/laser_scan"
 
@@ -57,8 +57,8 @@ private:
   float v_max, w_max;
   float v, w, theta;
 
-  int desired_angle;
-  int angle_correction;
+  float desired_angle;
+  float angle_correction;
 
   float b; // Distance between the two wheels(m)
   int current_state; // 0: Too close to wall, 1: Too far from wall, 2: Normal
@@ -82,8 +82,8 @@ public:
     w = 0;
 
     theta = 0;
-    desired_angle = 90;
-    angle_correction = 30;
+    desired_angle = M_PI/2;
+    angle_correction = 10;
 
     current_state = 0;
     leftWheelPos_Client = n.serviceClient<webots_ros::set_float>('/' + name + LEFT_WHEEL_POS_SERVICE);
@@ -103,11 +103,13 @@ public:
       //Too close to wall
       current_state = 1;
       theta = desired_angle - angle_correction;
+      theta = desired_angle;
     }
     else if (min_angle_distance[1] > target_distance + tolerance){
       //Too far from wall
       current_state = 2;
       theta = desired_angle + angle_correction;
+      theta = desired_angle;
     }
     else{
       //Correct distance from wall
@@ -184,7 +186,7 @@ public:
 
     // Angle of nearest object in radians
     min_angle_distance[0] = min_index * 2 * M_PI / LIDAR_RESOLUTION;
-    std::cout << "Nearest obstacle angle: " << min_angle_distance[0] * 180 / M_PI << std::endl;
+    std::cout << "Nearest obstacle angle: " << min_angle_distance[0] * 180.0 / M_PI << std::endl;
 
     // Distance to nearest object
     min_angle_distance[1] = min_distance;
@@ -199,28 +201,30 @@ public:
   }
 
   // PID controller for angular velocity
-  float Kp = 0.002;  // Proportional gain, start small
-  float Ki = 0.000005; // Integral gain, for accumulated error correction
-  float Kd = 0.0001;   // Derivative gain, for rate of change dampening
+  float Kp_w = 1.0/(M_PI/2);  // Proportional gain, start small
+  //float Ki_w = 0.000005; // integral_w gain, for accumulated error_w correction
+  float Ki_w = 0;
+  //float Kd_w = 0.0001;   // derivative_w gain, for rate of change dampening
+  float Kd_w = 0;
 
-  float error = 0;
-  float previous_error = 0;
-  float integral = 0;
-  float derivative = 0;
+  float error_w = 0;
+  float previous_error_w = 0;
+  float integral_w = 0;
+  float derivative_w = 0;
   
   void calculateAngularVelocity() {
-    error = theta - min_angle_distance[0];
+    error_w = theta - min_angle_distance[0];
 
-    // Wrap the error to keep it within [-PI, PI]
-    if (error < -M_PI) error += 2 * M_PI;
-    else if (error > M_PI) error -= 2 * M_PI;
+    // Wrap the error_w to keep it within [-PI, PI]
+    //if (error_w < - M_PI) error_w += 2 * M_PI;
+    //else if (error_w > M_PI) error_w -= 2 * M_PI;
 
-    // Calculate the integral and derivative components
-    integral += error;  // Accumulate the integral of the error
-    derivative = error - previous_error;
+    // Calculate the integral_w and derivative_w components
+    integral_w += error_w;  // Accumulate the integral_w of the error_w
+    derivative_w = error_w - previous_error_w;
 
-    // Update previous error for the next cycle
-    previous_error = error;
+    // Update previous error_w for the next cycle
+    previous_error_w = error_w;
 
     switch (current_state)
     {
@@ -228,14 +232,9 @@ public:
       w = 0;
       break;
     
-    case 1:
-      // PID formula for angular velocity
-      w = ((Kp * error) + (Ki * integral) + (Kd * derivative)) * (-1); // Turn right
-      break;
-
     default:
       // PID formula for angular velocity
-      w = (Kp * error) + (Ki * integral) + (Kd * derivative);
+      w = (Kp_w * error_w) + (Ki_w * integral_w) + (Kd_w * derivative_w); // Turn left
       break;
     }
 
@@ -244,12 +243,39 @@ public:
     // Clamp the angular velocity to prevent it from becoming too large
     w = clamp(w, -w_max, w_max);
 
-    // Debug output for tracking PID components
-    ROS_INFO("Error: %.4f | Integral: %.4f | Derivative: %.4f | Angular Velocity (w): %.4f", error, integral, derivative, w);
+    // Debug output for tracKing PID components
+    std::cout << "theta: " << theta * 180.0 /M_PI << "min_angle_distance " << min_angle_distance[0] * 180.0 / M_PI << std::endl;
+    ROS_INFO("error_w: %.4f | integral_w: %.4f | derivative_w: %.4f | Angular Velocity (w): %.4f", error_w * 180.0 / M_PI, integral_w, derivative_w, w);
   }
   
+  float error_v = 0;
+  float in_target_v = 2.0;
+
+  // PID controller for linear velocity
+  float Kp_v = 0;  // Proportional gain, start small
+
+
   void calculateLinearVelocity(){
-    v = 1.0;
+    /*error_v = std::abs(target_distance - min_angle_distance[1]);
+
+    if (error_v < 0.1){
+      Kp_v = 1.0;
+    }
+    else{
+      Kp_v = error_v*10;
+    }
+
+
+    v = in_target_v/Kp_v;
+
+    // Clamp the linear velocity to prevent it from becoming too large
+    v = clamp(v, -v_max, v_max);
+
+    // Debug output for tracking PID components
+    ROS_INFO("error_v: %.4f | Linear Velocity (v): %.4f", error_v, v);*/
+
+    // Constant linear velocity
+    v = 0.5;
   }
 };
 
@@ -281,25 +307,25 @@ int main(int argc, char **argv) {
   while (ros::ok()) {
     ros::spinOnce();
 
-    if(robot1.check_lidar()) {
-      //robot1.setVelocity(1.0, 0.0);
-      robot1.getLaserScan();
-      robot1.getClosestObstacle();
-      //std::cout << "Nearest obstacle angle: " << robot1.min_angle_distance[0] * 180 / M_PI << std::endl;
-      std::cout << "Nearest obstacle distance: " << robot1.min_angle_distance[1] << std::endl;
+    //if(robot1.check_lidar()) {
+    //robot1.setVelocity(1.0, 0.0);
+    robot1.getLaserScan();
+    robot1.getClosestObstacle();
+    //std::cout << "Nearest obstacle angle: " << robot1.min_angle_distance[0] * 180 / M_PI << std::endl;
+    std::cout << "Nearest obstacle distance: " << robot1.min_angle_distance[1] << std::endl;
 
-      robot1.updateStateMachine();
+    robot1.updateStateMachine();
 
-      robot1.calculateAngularVelocity();
-      robot1.calculateLinearVelocity();
+    robot1.calculateAngularVelocity();
+    robot1.calculateLinearVelocity();
 
-      // Set wheel velocity
-      if (robot1.setVelocity()) {
-          ROS_INFO("Velocity set successfully\n");
-      } else {
-          ROS_WARN("Failed to set velocity");
-      }
+    // Set wheel velocity
+    if (robot1.setVelocity()) {
+        ROS_INFO("Velocity set successfully\n");
+    } else {
+        ROS_WARN("Failed to set velocity");
     }
+    //}
   }
   return (0);
 }
