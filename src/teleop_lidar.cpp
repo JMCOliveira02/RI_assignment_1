@@ -9,18 +9,30 @@
 #include "ros/ros.h"
 
 #define TIME_STEP 32
-#define MAX_LINEAR_SPEED 10.0
-#define MAX_ANGULAR_SPEED 4.0
 
 #define TIME_STEP_SRV "/robot/time_step"
 
 #define ROBOT_1_NAME "robot1"
 #define ROBOT_2_NAME "robot2"
 
-#define LIDAR_RESOLUTION 360
-#define LIDAR_MIN_ANGLE - M_PI
-#define LIDAR_SERVICE "/lidar/enable"
-#define LIDAR_TOPIC "/lidar/laser_scan"
+#define ROBOT_1_MAX_LINEAR_SPEED 5.0
+#define ROBOT_1_MAX_ANGULAR_SPEED 4.0
+
+#define ROBOT_2_MAX_LINEAR_SPEED 7.0
+#define ROBOT_2_MAX_ANGULAR_SPEED 4.0
+
+#define SIDE_LIDAR 0
+#define FRONT_LIDAR 1
+
+#define LIDAR_SIDE_RESOLUTION 165
+#define LIDAR_SIDE_FOV M_PI * 165 / 180
+#define LIDAR_SIDE_SERVICE "/lidar_side/enable"
+#define LIDAR_SIDE_TOPIC "/lidar_side/laser_scan"
+
+#define LIDAR_FRONT_RESOLUTION 50
+#define LIDAR_FRONT_FOV M_PI * 50 / 180
+#define LIDAR_FRONT_SERVICE "/lidar_front/enable"
+#define LIDAR_FRONT_TOPIC "/lidar_front/laser_scan"
 
 #define RIGHT_WHEEL_POS_SERVICE "/right_wheel_motor/set_position"
 #define RIGHT_WHEEL_VEL_SERVICE "/right_wheel_motor/set_velocity"
@@ -44,11 +56,17 @@ private:
   ros::ServiceClient rightWheelVel_Client;
   webots_ros::set_float rightWheelVel_Srv;
 
-  ros::ServiceClient lidarEnable_Client;
-  webots_ros::set_int lidarEnable_Srv;
+  ros::ServiceClient lidarSideEnable_Client;
+  webots_ros::set_int lidarSideEnable_Srv;
+
+  ros::ServiceClient lidarFrontEnable_Client;
+  webots_ros::set_int lidarFrontEnable_Srv;
 
   ros::ServiceClient timeStepClient;
   webots_ros::set_int timeStepSrv;
+
+  ros::Subscriber sideLidarSub;
+  ros::Subscriber frontLidarSub;
 
   // Subscribers
   ros::Subscriber lidarSub;
@@ -56,25 +74,58 @@ private:
   // Variables
   float v_max, w_max;
   float v, w, theta;
-
-  float desired_angle;
   float angle_correction;
 
   float b; // Distance between the two wheels(m)
   bool follower; //Defines if robot is of the type follower
 
-
-
 public:
   
-  float laser_scan[LIDAR_RESOLUTION];
-  float min_angle_distance[2];
+  float side_laser_scan[LIDAR_SIDE_RESOLUTION];
+  float front_laser_scan[LIDAR_FRONT_RESOLUTION];
+  float min_side_angle_distance[2];
+  float min_front_angle_distance[2];
+
   float target_wall_distance;
   float wall_distance_tolerance;
 
-  float target_front_distance;
-  float front_distance_tolerance;
+  float angle_distance[2];
+  float min_distance = 1000;
+  float min_index = 0;
+  float angle_step;
+  
+  void sideLidarCallback(const sensor_msgs::LaserScan::ConstPtr &msg) {
+    min_distance = 1000;
+    min_index = 0;
+    angle_step = LIDAR_SIDE_FOV / LIDAR_SIDE_RESOLUTION;
+    for (int i = 0; i < LIDAR_SIDE_RESOLUTION; i++) {
+      if (msg->ranges[i] < min_distance) {
+        min_distance = msg->ranges[i];
+        min_index = i;
+      }
+    }
 
+    min_side_angle_distance[0] = min_index * angle_step;
+    min_side_angle_distance[1] = min_distance;
+
+  }
+  
+  void frontLidarCallback(const sensor_msgs::LaserScan::ConstPtr &msg) {
+    min_distance = 1000;
+    min_index = 0;
+    angle_step = LIDAR_FRONT_FOV / LIDAR_FRONT_RESOLUTION;
+    for (int i = 0; i < LIDAR_FRONT_RESOLUTION; i++) {
+      if (msg->ranges[i] < min_distance){
+        min_distance = msg->ranges[i];
+        min_index = i;
+      }
+    }
+    
+    min_front_angle_distance[0] = min_index * angle_step;
+    min_front_angle_distance[1] = min_distance;
+
+    
+  }
 
   Robot(std::string name, float v_max, float w_max, bool follower) {
     this->name = name;
@@ -85,9 +136,7 @@ public:
     v = 0;
     w = 0;
 
-    theta = 0;
-    desired_angle = M_PI/2;
-    angle_correction = 10;
+    theta = M_PI/2;
 
     this->follower = follower;
     leftWheelPos_Client = n.serviceClient<webots_ros::set_float>('/' + name + LEFT_WHEEL_POS_SERVICE);
@@ -96,51 +145,39 @@ public:
     rightWheelVel_Client = n.serviceClient<webots_ros::set_float>('/' + name + RIGHT_WHEEL_VEL_SERVICE);
     timeStepClient = n.serviceClient<webots_ros::set_int>('/' + name + TIME_STEP_SRV);
     timeStepSrv.request.value = TIME_STEP;
+
+    sideLidarSub = n.subscribe('/' + name + LIDAR_SIDE_TOPIC, 1, &Robot::sideLidarCallback, this);
+
+    if(follower){
+      frontLidarSub = n.subscribe('/' + name + LIDAR_FRONT_TOPIC, 1, &Robot::frontLidarCallback, this);
+    }
+
     setVelocity();
     setWheelPosition(INFINITY, INFINITY);
-    // lidarSub = n.subscribe('/' + name + LIDAR_TOPIC, 1, &Robot::getLaserScan, this);
-  }
-
-/*   void updateStateMachine() {
-    
-    if (min_angle_distance[1] < target_wall_distance - wall_distance_tolerance){
-      //Too close to wall
-      current_state = 1;
-      theta = desired_angle - angle_correction;
-      theta = desired_angle;
-    }
-    else if (min_angle_distance[1] > target_wall_distance + wall_distance_tolerance){
-      //Too far from wall
-      current_state = 2;
-      theta = desired_angle + angle_correction;
-      theta = desired_angle;
-    }
-    else{
-      //Correct distance from wall
-      current_state = 3;
-      theta = desired_angle;
-    }
-  } */
-
-  bool check_lidar() {
-    sensor_msgs::LaserScan::ConstPtr msg = ros::topic::waitForMessage<sensor_msgs::LaserScan>('/' + name + LIDAR_TOPIC, n, ros::Duration(1.0)); // timeout after 1 second
-    if (!msg) {
-      ROS_WARN("LIDAR not responding.");
-      enable_lidar();  // Try re-enabling LIDAR
-      return false;
-    }
-    return true;
   }
 
   void enable_lidar() {
-    this->lidarEnable_Client = n.serviceClient<webots_ros::set_int>('/' + name + LIDAR_SERVICE);
-    std::cout << "Enabling lidar" << std::endl;  // Debug
-    this->lidarEnable_Srv.request.value = TIME_STEP;
-    if (this->lidarEnable_Client.call(this->lidarEnable_Srv) && this->lidarEnable_Srv.response.success) {
-      std::cout << "Lidar enabled" << std::endl;
+
+    this->lidarSideEnable_Client = n.serviceClient<webots_ros::set_int>('/' + name + LIDAR_SIDE_SERVICE);
+    std::cout << "Enabling side lidar" << std::endl;  // Debug
+    this->lidarSideEnable_Srv.request.value = TIME_STEP;
+    if (this->lidarSideEnable_Client.call(this->lidarSideEnable_Srv) && this->lidarSideEnable_Srv.response.success) {
+      std::cout << "Side Lidar enabled" << std::endl;
     } else {
-      std::cout << "Failed to enable lidar" << std::endl;
+      std::cout << "Failed to enable side lidar" << std::endl;
     }
+
+    if(follower){
+       this->lidarFrontEnable_Client = n.serviceClient<webots_ros::set_int>('/' + name + LIDAR_FRONT_SERVICE);
+      std::cout << "Enabling front lidar" << std::endl;  // Debug
+      this->lidarFrontEnable_Srv.request.value = TIME_STEP;
+      if (this->lidarFrontEnable_Client.call(this->lidarFrontEnable_Srv) && this->lidarFrontEnable_Srv.response.success) {
+        std::cout << "Front Lidar enabled" << std::endl;
+      } else {
+        std::cout << "Failed to enable front lidar" << std::endl;
+      }
+    }
+
     return;
   }
 
@@ -156,53 +193,17 @@ public:
     return false;
   }
 
+  float left_vel = 0; 
+  float right_vel = 0;
   bool setVelocity() {
     std::cout << "Setting velocity to " << v << " " << w << std::endl;
-    float left_vel = v - w / 2;
-    float right_vel = v + w / 2;
-    // std::cout << "Setting left velocity to " << left_vel << std::endl;
-    // std::cout << "Setting right velocity to " << right_vel << std::endl;
+    left_vel = v - w / 2;
+    right_vel = v + w / 2;
+
     this->leftWheelVel_Srv.request.value = left_vel;
     this->rightWheelVel_Srv.request.value = right_vel;
     return this->leftWheelVel_Client.call(this->leftWheelVel_Srv) && this->rightWheelVel_Client.call(this->rightWheelVel_Srv) &&
            this->leftWheelVel_Srv.response.success && this->rightWheelVel_Srv.response.success;
-  }
-
-  void getLaserScan() {
-    std::cout << "Waiting for laser scan" << std::endl;
-    sensor_msgs::LaserScan::ConstPtr msg = ros::topic::waitForMessage<sensor_msgs::LaserScan>('/' + name + LIDAR_TOPIC);
-    for (int i = 0; i < LIDAR_RESOLUTION; i++) {
-      laser_scan[i] = msg->ranges[i];
-      // std::cout << "Laser scan " << i << ": " << laser_scan[i] << std::endl;
-    }
-  }
-
-  void getClosestObstacle(float fov_start, float fov_end) {
-    // field of view in radians: [fov_start, fov_end]
-    float angle_distance[2];
-    float min_distance = 1000;
-    float min_index = 0;
-    float max_index = 0;
-    float angle_step = (2*M_PI) / LIDAR_RESOLUTION;
-    
-    min_index = (int)(fov_start / angle_step);
-    max_index = (int)(fov_end / angle_step);
-
-    for (int i = min_index; i <= max_index; i++) {
-      if (laser_scan[i] < min_distance) {
-        min_distance = laser_scan[i];
-        min_index = i;
-      }
-    }
-
-    // Angle of nearest object in radians
-    min_angle_distance[0] = min_index * 2 * M_PI / LIDAR_RESOLUTION;
-    std::cout << "Nearest obstacle angle: " << min_angle_distance[0] * 180.0 / M_PI << std::endl;
-
-    // Distance to nearest object
-    min_angle_distance[1] = min_distance;
-
-    return;
   }
 
   float clamp(float value, float min, float max) {
@@ -224,40 +225,46 @@ public:
   float error_theta = 0;
   float previous_error_theta = 0;
   
-  float error_distance = 0;
-  float previous_error_distance = 0;
+  float wall_error_distance = 0;
+  float previous_wall_error_distance = 0;
+
+  float front_error_distance = 0;
+  float previous_front_error_distance = 0;
+
   float integral_w = 0;
   float derivative_w = 0;
   
   void calculateAngularVelocity() {
-    // Get closest point  
-    getClosestObstacle(0, M_PI);
-    // Error between the desired angle of movement and the closest obstacle angle detected
-    error_theta = theta - min_angle_distance[0];
-    // Error between the desired distance and the 
-    error_distance = target_wall_distance - min_angle_distance[1];
+    // std::cout << "Nearest SIDE obstacle angle: " << min_side_angle_distance[0] * 180.0 / M_PI << std::endl;
+    // std::cout << "Nearest SIDE obstacle distance: " << min_side_angle_distance[1] << std::endl;
 
-    if(abs(error_distance) < wall_distance_tolerance){
-      error_distance = 0;
+    // Error between the desired angle of movement and the closest obstacle angle detected
+    error_theta = theta - min_side_angle_distance[0];
+    // Error between the desired distance and the 
+    wall_error_distance = target_wall_distance - min_side_angle_distance[1];
+
+    if(abs(wall_error_distance) < wall_distance_tolerance){
+      wall_error_distance = 0;
     }
-    // Calculate the integral_w and derivative_w components
-    //integral_w += error_w;  // Accumulate the integral_w of the error_w
-    //derivative_w = error_w - previous_error_w;
 
     // Update previous error_w for the next cycle
     previous_error_theta = error_theta;
-    previous_error_distance = error_distance;
+    previous_wall_error_distance = wall_error_distance;
 
 
     // PID formula for angular velocity
-    w = (Kp_theta * error_theta) - (Kp_distance * error_distance) ;//+ (Ki_w * integral_w) + (Kd_w * derivative_w);
+    w = (Kp_theta * error_theta) - (Kp_distance * wall_error_distance);
     
     // Clamp the angular velocity to prevent it from becoming too large
     w = clamp(w, -w_max, w_max);
 
     // Debug output for tracKing PID components
-    std::cout << "theta: " << theta * 180.0 /M_PI << "min_angle_distance " << min_angle_distance[0] * 180.0 / M_PI << std::endl;
-    ROS_INFO("error_w: %.4f | integral_w: %.4f | derivative_w: %.4f | Angular Velocity (w): %.4f", error_theta * 180.0 / M_PI, integral_w, derivative_w, w);
+    // std::cout << "theta: " << theta * 180.0 /M_PI << " min_angle_distance " << min_side_angle_distance[0] * 180.0 / M_PI << std::endl;
+    // std::cout << "error_w: " << (error_theta * 180.0 / M_PI) 
+    //       << " | integral_w: " << integral_w 
+    //       << " | derivative_w: " << derivative_w 
+    //       << " | Angular Velocity (w): " << w 
+    //       << std::endl;
   }
   
   float error_v = 0;
@@ -265,14 +272,25 @@ public:
 
   // PID controller for linear velocity
   float Kp_v = 0;  // Proportional gain, start small
+  float front_deaccel_distance = 0;
 
-
-  void calculateLinearVelocity(){
+  void calculateLinearVelocity(float linear_speed_diff, float equilib_distance) {
     if(!follower){
-      v = 5.0;
+      v = v_max;
       return;
     }
+    // Get closest point in the front (150 to 210 degrees)
+    std::cout << "Nearest FRONT obstacle angle: " << min_front_angle_distance[0] * 180.0 / M_PI << std::endl;
+    std::cout << "Nearest FRONT obstacle distance: " << min_front_angle_distance[1] << std::endl;
 
+    front_deaccel_distance = 2.0 * equilib_distance;
+    Kp_v = linear_speed_diff / (front_deaccel_distance - equilib_distance);
+    front_error_distance = front_deaccel_distance - min_front_angle_distance[1];
+    std::cout << "Front error distance: " << front_error_distance << std::endl;
+    
+    v = v_max - (Kp_v * front_error_distance);
+    
+    v = clamp(v, 0, v_max);
   }
 };
 
@@ -284,15 +302,19 @@ void quit(int sig) {
 
 int main(int argc, char **argv) {
   ros::init(argc, argv, "wall_follower", ros::init_options::AnonymousName);
+  
 
-  Robot robot1(ROBOT_1_NAME, MAX_LINEAR_SPEED, MAX_ANGULAR_SPEED, false);
-  Robot robot2(ROBOT_2_NAME, MAX_LINEAR_SPEED, MAX_ANGULAR_SPEED, true);
+  Robot robot1(ROBOT_1_NAME, ROBOT_1_MAX_LINEAR_SPEED, ROBOT_1_MAX_ANGULAR_SPEED, false);
+  Robot robot2(ROBOT_2_NAME, ROBOT_2_MAX_LINEAR_SPEED, ROBOT_2_MAX_ANGULAR_SPEED, true);
+
+  float linear_speed_diff = ROBOT_2_MAX_LINEAR_SPEED - ROBOT_1_MAX_LINEAR_SPEED;
+  float equilib_distance = 1.5;
 
   signal(SIGINT, quit);
 
   // Wait for the `ros` controller.
   ros::service::waitForService("/robot1/robot/time_step");
-  std::cout << "time_step: " <<TIME_STEP<< std::endl;
+  std::cout << "time_step: " << TIME_STEP << std::endl;
   ros::spinOnce();
 
   robot1.enable_lidar();
@@ -309,24 +331,30 @@ int main(int argc, char **argv) {
   while (ros::ok()) {
     ros::spinOnce();
 
-    //if(robot1.check_lidar()) {
-    //robot1.setVelocity(1.0, 0.0);
-    robot1.getLaserScan();
-    //std::cout << "Nearest obstacle angle: " << robot1.min_angle_distance[0] * 180 / M_PI << std::endl;
-    std::cout << "Nearest obstacle distance: " << robot1.min_angle_distance[1] << std::endl;
-
-    //robot1.updateStateMachine();
-
+    // Get closest point in the left area 
+    //std::cout << "--- Robot 1 ---" << std::endl;
+    // robot1.getLaserScans();
+    // robot1.getClosestObstacles();
     robot1.calculateAngularVelocity();
-    robot1.calculateLinearVelocity();
+    robot1.calculateLinearVelocity(linear_speed_diff, equilib_distance);
+
+    // //std::cout << "--- Robot 2 ---" << std::endl;
+    robot2.calculateAngularVelocity();
+    robot2.calculateLinearVelocity(linear_speed_diff, equilib_distance);
 
     // Set wheel velocity
     if (robot1.setVelocity()) {
-        ROS_INFO("Velocity set successfully\n");
+        //ROS_INFO("Velocity for 1 set successfully\n");
     } else {
-        ROS_WARN("Failed to set velocity");
+        ROS_WARN("Failed to set velocity for 1");
     }
-    //}
+    
+     if (robot2.setVelocity()) {
+         //ROS_INFO("Velocity for 2 set successfully \n");
+     } else {
+         ROS_WARN("Failed to set velocity for 2");
+     }
   }
-  return (0);
+
+  return 0;
 }
