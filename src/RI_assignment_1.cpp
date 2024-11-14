@@ -78,7 +78,7 @@ private:
 
   // Variables
   float v_max, w_max;
-  float v, w, theta;
+  float v, w, theta;                      // Linear and angular velocity of the robot, and the desired angle for the robot
   float angle_correction;
 
   bool follower;                          //Defines if robot is of the type follower
@@ -102,10 +102,9 @@ private:
   float Kp_theta = 18.0/(M_PI/2);         // Proportional gain for the angular correction with the wall
   float Kp_distance = 6.0;                // Proportional gain for the distance correction with the wall
 
-  float error_theta = 0;
-  
-  float wall_error_distance = 0;          // Error between the desired distance and the actual distance from the wall
-  float front_error_distance = 0;         // Error between the desired distance and the actual distance from the front robot
+  float error_theta = 0;                  // Error between the desired angle for the robot to mantain with the wall and current
+  float wall_error_distance = 0;          // Error between the desired distance and the distance from the wall
+  float front_error_distance = 0;         // Error between the desired distance and the distance from the front robot
   
   float Kp_v = 0;                         // Proportional gain for the linear velocity correction with the front obstacle
   float front_deaccel_distance = 0;       // Distance at which the robot starts to deaccelerate
@@ -271,7 +270,7 @@ public:
     // std::cout << "error_w: " << (error_theta * 180.0 / M_PI) << " angular velocity: " << w << std::endl;
   }
 
-      /**
+  /**
   * Calcuates the linear velocity of the robot. 
   * In case that the robot is follower type, it will slow down when detects the other robot in front of it.
   * 
@@ -347,6 +346,5 @@ int main(int argc, char **argv) {
          ROS_WARN("Failed to set velocity for 2");
      }
   }
-
   return 0;
 }

@@ -184,13 +184,13 @@ include_directories(
 #### ADDED NODES
 
 
-## Instructions for teleop_lidar node
+## Instructions for RI_assignment_1 node
 
-add_executable(teleop_lidar src/teleop_lidar.cpp)
+add_executable(RI_assignment_1 src/RI_assignment_1.cpp)
 
-add_dependencies(teleop_lidar webots_ros_generate_messages_cpp)
+add_dependencies(RI_assignment_1 webots_ros_generate_messages_cpp)
 
-target_link_libraries(teleop_lidar
+target_link_libraries(RI_assignment_1
 	${catkin_LIBRARIES}
 )
 
@@ -273,7 +273,7 @@ target_link_libraries(panoramic_view_recorder
 #############
 
 #### ADDED NODES
-install(TARGETS teleop_lidar
+install(TARGETS RI_assignment_1
         RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 
 install(TARGETS PointCloudPublisher
